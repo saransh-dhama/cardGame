@@ -8,74 +8,160 @@ const PageWrapper = styled.section`
 	img {
 		width: 300px;
 	}
+`;
+const RemainingCardsDiv = styled.div`
+	width: 100%;
+`;
+const PreviousCardsDiv = styled.div`
+	display: flex;
+	flex-direction: column;
+	align-items: center;
+	img {
+		width: 100px;
+	}
+	span {
+		height: 30px;
+	}
+`;
+const ButtonsDiv = styled.div`
 	button {
 		display: block;
 		margin: auto;
+		height: 40px;
+		width: 200px;
+		border: 0;
+		background-color: #e2e2e2;
+		border-radius: 6px;
+		outline: none !important;
+		cursor: pointer;
+		font-size: 16px;
+		&:hover {
+			background-color: #c6d6d8;
+			border-radius: 6px;
+		}
 	}
 `;
-const RemainingCardsDiv = styled.div`
-	height: 30px;
-	width: 100%;
+const UpDownButtonsDiv = styled.div`
+	display: grid;
+	grid-template-columns: 1fr 1fr 1fr;
+	margin-top: 60px;
+	height: 169px;
 `;
-
+const RestartButtonsDiv = styled.div`
+	display: grid;
+	grid-template-columns: 1fr;
+	margin-top: 60px;
+`;
 function App() {
 	const [deckData, setDeckData] = useState();
 	const [currentCardData, setCurrentCardData] = useState();
 	const [previousCardData, setpreviousCardData] = useState();
-	let score = 0;
-	const StartGame = async () => {
-		try {
-			const res = await axios.get(
-				`https://deckofcardsapi.com/api/deck/new/shuffle/?deck_count=1`
-			);
-			setDeckData(res.data);
-		} catch (error) {
-			console.log(error);
-		}
+	const [score, setScore] = useState(0);
+	const [predictType, setPredict] = useState();
+
+	const StartGame = () => {
+		axios
+			.get(`https://deckofcardsapi.com/api/deck/new/shuffle/?deck_count=1`)
+			.then((response) => {
+				return DrawACard(response.data.deck_id);
+			})
+			.catch((error) => console.log(error));
 	};
-	const DrawACard = async () => {
+	const DrawACard = async (deckId) => {
 		try {
 			const res = await axios.get(
-				`https://deckofcardsapi.com/api/deck/${deckData.deck_id}/draw/?count=1`
+				`https://deckofcardsapi.com/api/deck/${deckId}/draw/?count=1`
 			);
-			console.log(res);
 			setCurrentCardData(res.data.cards[0]);
 			setDeckData({ ...res.data });
+			return res;
 		} catch (error) {
 			console.log(error);
 		}
 	};
 
 	useEffect(() => {
-		StartGame().then(() => {
-			DrawACard();
-		});
+		StartGame();
 	}, []);
-	const PredictLower = () => {
-		setpreviousCardData(currentCardData);
-		DrawACard().then(() => {
-			score = currentCardData.value;
+
+	useEffect(() => {
+		if (!deckData) return;
+		DrawACard(deckData.deck_id).then((res) => {
+			if (res) {
+				console.log(res.data);
+				const cardDrawn = calculateValueForFaceCards(res.data.cards[0].value);
+
+				if (
+					(predictType === 'low' && cardDrawn <= previousCardData.value) ||
+					(predictType === 'high' && cardDrawn >= previousCardData.value)
+				)
+					setScore(score + 1);
+			}
 		});
+	}, [previousCardData, predictType]);
+
+	const calculateValueForFaceCards = (value) => {
+		switch (value) {
+			case 'QUEEN':
+				return 12;
+			case 'KING':
+				return 13;
+			case 'JACK':
+				return 11;
+			case 'ACE':
+				return 14;
+			default:
+				return value;
+		}
 	};
 
 	return (
 		<PageWrapper className='page_wrapper'>
-			{!deckData ? (
-				<button onClick={StartGame}> Start Game</button>
-			) : (
+			{deckData ? (
 				<>
 					<RemainingCardsDiv>
 						{deckData
 							? `There are ${deckData.remaining} cards remaining`
 							: null}
+						<h1>{`Current Score: ${score}`}</h1>
 					</RemainingCardsDiv>
 					{currentCardData ? <img src={currentCardData.image} /> : null}
-
-					<button onClick={PredictLower}>Next card lower</button>
-					<button>Next card higher</button>
-					<span>{previousCardData ? previousCardData.value : null}</span>
+					{deckData.remaining > 0 ? (
+						<ButtonsDiv>
+							<UpDownButtonsDiv>
+								<button
+									onClick={() => {
+										setpreviousCardData(currentCardData);
+										setPredict('low');
+									}}
+								>
+									Next card is lower
+								</button>
+								<PreviousCardsDiv>
+									<span>{previousCardData ? `Previous card was` : null}</span>
+									{previousCardData ? (
+										<img src={previousCardData.image} />
+									) : null}
+								</PreviousCardsDiv>
+								<button
+									onClick={() => {
+										setpreviousCardData(currentCardData);
+										setPredict('high');
+									}}
+								>
+									Next card is higher
+								</button>
+							</UpDownButtonsDiv>
+						</ButtonsDiv>
+					) : (
+						<ButtonsDiv>
+							<RestartButtonsDiv>
+								<button onClick={StartGame}> Restart Game</button>
+							</RestartButtonsDiv>
+						</ButtonsDiv>
+					)}
 				</>
-			)}
+			) : null}
 		</PageWrapper>
 	);
 }
